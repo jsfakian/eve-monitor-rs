@@ -697,9 +697,7 @@ pub struct BondConfig {
     pub aggregated_ports: Option<Vec<String>>,
     pub mode: BondMode,
     pub lacp_rate: LacpRate,
-    #[serde(rename = "MIIMonitor")]
     pub mii_monitor: BondMIIMonitor,
-    #[serde(rename = "ARPMonitor")]
     pub arp_monitor: BondArpMonitor,
 }
 
@@ -1635,4 +1633,31 @@ impl TpmLogs {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct EvalStatus {
+    #[serde(rename = "IsEvaluationPlatform")]
+    pub is_evaluation_platform: bool,
+    #[serde(rename = "CurrentSlot")]
+    pub current_slot: String,
+    #[serde(rename = "Phase")]
+    pub phase: String,
+    #[serde(rename = "AllowOnboard")]
+    pub allow_onboard: bool,
+    #[serde(rename = "Note")]
+    pub note: String,
+    #[serde(rename = "LastUpdated")]
+    pub last_updated: String,
+    #[serde(rename = "TestStartTime")]
+    pub test_start_time: String,
+    #[serde(rename = "TestDuration")]
+    pub test_duration: u64,
+    #[serde(rename = "RebootCountdown")]
+    pub reboot_countdown: u64,
+    #[serde(rename = "InventoryCollected")]
+    pub inventory_collected: bool,
+    #[serde(rename = "InventoryDir")]
+    pub inventory_dir: String,
 }

@@ -8,7 +8,7 @@ use crate::{
 };
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::{debug, info};
+use log::debug;
 use ratatui::{
     layout::{
         Constraint::{Fill, Length},
@@ -33,8 +33,10 @@ use crate::{
 use super::{
     action::Action,
     app_page::ApplicationsPage,
+    evalstatus_page::EvalStatusPage,
     layer_stack::LayerStack,
     networkpage::create_network_page,
+    reboot_warning::create_reboot_warning_dialog,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
     vaultpage::VaultPage,
@@ -55,6 +57,8 @@ pub struct Ui {
     pub selected_tab: UiTabs,
     pub status_bar: Window<StatusBarState>,
     first_frame: bool,
+    startup_warning_shown: bool,
+    last_reboot_warning: u64, // Last countdown we showed warning for
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -67,6 +71,7 @@ pub enum UiTabs {
     Applications,
     Vault,
     Dmesg,
+    EvalStatus,
 }
 
 impl Debug for Ui {
@@ -84,6 +89,8 @@ impl Ui {
             selected_tab: UiTabs::default(),
             status_bar: create_status_bar(),
             first_frame: true,
+            startup_warning_shown: false,
+            last_reboot_warning: u64::MAX,
         })
     }
 
@@ -109,6 +116,7 @@ impl Ui {
         self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
         self.views[UiTabs::Vault as usize].push(Box::new(VaultPage::new()));
+        self.views[UiTabs::EvalStatus as usize].push(Box::new(EvalStatusPage::new()));
     }
 
     pub fn draw(&mut self, model: Rc<Model>) {
@@ -293,6 +301,34 @@ impl Ui {
     pub fn message_box(&mut self, title: &str, message: &str) {
         let d = super::message_box::create_message_box(title, message);
         self.push_layer(d);
+    }
+
+    pub fn show_eval_startup_warning(&mut self) {
+        if !self.startup_warning_shown {
+            self.startup_warning_shown = true;
+            let title = "Evaluation Mode";
+            let message = "This device is running an EVALUATION MODE.\n\n\
+                          You can look around and inspect detailed status, but:\n\n\
+                          DO NOT change settings\n\
+                          DO NOT reboot the device\n\n\
+                          The device may reboot automatically when testing is complete.\n\n\
+                          Check the EvalStatus tab for reboot countdown.";
+            self.message_box(title, message);
+        }
+    }
+
+    pub fn check_and_show_reboot_warning(&mut self, model: &Rc<Model>) {
+        if let Some(eval_status) = &model.borrow().eval_status {
+            let countdown = eval_status.reboot_countdown;
+
+            // Show warning if countdown is less than 5 minutes
+            // and we haven't shown it for this countdown value yet
+            if countdown < 300 && countdown != self.last_reboot_warning {
+                self.last_reboot_warning = countdown;
+                let d = create_reboot_warning_dialog(countdown);
+                self.push_layer(d);
+            }
+        }
     }
 }
 

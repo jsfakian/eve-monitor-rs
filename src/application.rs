@@ -241,6 +241,11 @@ impl Application {
                 self.model.borrow_mut().update_zed_agent_status(status);
             }
 
+            IpcMessage::EvalStatus(status) => {
+                debug!("Got EvalStatus");
+                self.model.borrow_mut().update_eval_status(status);
+            }
+
             IpcMessage::TUIConfig(cfg) => {
                 info!("== Configuration changed: TUIConfig ==");
                 // update log level
