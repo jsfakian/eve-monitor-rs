@@ -693,6 +693,19 @@ impl Application {
     }
 
     fn draw_ui(&mut self, model: Rc<Model>) -> Result<()> {
+        // Check if we should show evaluation startup warning
+        {
+            let model_ref = model.borrow();
+            if let Some(eval_status) = &model_ref.eval_status {
+                if eval_status.is_evaluation_platform {
+                    self.ui.show_eval_startup_warning();
+                }
+            }
+        }
+        
+        // Check for reboot countdown warnings
+        self.ui.check_and_show_reboot_warning(&model);
+        
         self.ui.draw(model);
         Ok(())
     }

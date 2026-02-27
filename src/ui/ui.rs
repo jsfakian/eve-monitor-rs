@@ -307,12 +307,16 @@ impl Ui {
         if !self.startup_warning_shown {
             self.startup_warning_shown = true;
             let title = "Evaluation Mode";
-            let message = "This device is running an EVALUATION MODE.\n\n\
-                          You can look around and inspect detailed status, but:\n\n\
-                          DO NOT change settings\n\
-                          DO NOT reboot the device\n\n\
-                          The device may reboot automatically when testing is complete.\n\n\
-                          Check the EvalStatus tab for reboot countdown.";
+            let message = r#"This device is running in EVALUATION MODE.
+
+You can look around and inspect detailed status, but:
+
+DO NOT change settings
+DO NOT reboot the device
+
+The device may reboot automatically when testing is complete.
+
+Check the EvalStatus tab for reboot countdown."#;
             self.message_box(title, message);
         }
     }
@@ -321,12 +325,21 @@ impl Ui {
         if let Some(eval_status) = &model.borrow().eval_status {
             let countdown = eval_status.reboot_countdown;
 
-            // Show warning if countdown is less than 5 minutes
-            // and we haven't shown it for this countdown value yet
-            if countdown < 300 && countdown != self.last_reboot_warning {
+            // Treat countdown == 0 as "no reboot scheduled" and reset state.
+            if countdown == 0 {
+                self.last_reboot_warning = 0;
+                return;
+            }
+
+            // Show warning once per reboot cycle when countdown becomes urgent
+            // (less than 5 minutes) and we haven't shown it yet for this cycle.
+            if countdown < 300 && self.last_reboot_warning == 0 {
                 self.last_reboot_warning = countdown;
                 let d = create_reboot_warning_dialog(countdown);
                 self.push_layer(d);
+            } else {
+                // Track the last seen countdown without spamming dialogs.
+                self.last_reboot_warning = countdown;
             }
         }
     }

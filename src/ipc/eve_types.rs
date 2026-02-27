@@ -697,7 +697,9 @@ pub struct BondConfig {
     pub aggregated_ports: Option<Vec<String>>,
     pub mode: BondMode,
     pub lacp_rate: LacpRate,
+    #[serde(rename = "MIIMonitor")]
     pub mii_monitor: BondMIIMonitor,
+    #[serde(rename = "ARPMonitor")]
     pub arp_monitor: BondArpMonitor,
 }
 

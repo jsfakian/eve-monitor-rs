@@ -7,7 +7,7 @@ use ratatui::{
     layout::Rect,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
 };
 
@@ -24,11 +24,11 @@ fn format_duration_ns(nanos: u64) -> String {
     let days = hours / 24;
 
     if days > 0 {
-        format!("{}d {}", days, hours % 24)
+        format!("{}d {}h", days, hours % 24)
     } else if hours > 0 {
-        format!("{}h {}", hours, mins % 60)
+        format!("{}h {}m", hours, mins % 60)
     } else if mins > 0 {
-        format!("{}m {}", mins, secs % 60)
+        format!("{}m {}s", mins, secs % 60)
     } else {
         format!("{}s", secs)
     }
@@ -184,13 +184,19 @@ impl IPresenter for EvalStatusPage {
 
             // Reboot Countdown - with urgency coloring
             let reboot_secs = eval_status.reboot_countdown;
-            let reboot_str = format_countdown_secs(reboot_secs);
-            let reboot_color = if reboot_secs < 60 {
-                Color::Red // Less than 1 minute - urgent
-            } else if reboot_secs < 300 {
-                Color::Yellow // Less than 5 minutes - warning
+            let (reboot_str, reboot_color) = if reboot_secs == 0 {
+                // 0 indicates "no reboot scheduled" - show neutral text and color
+                ("Not scheduled".to_string(), Color::DarkGray)
             } else {
-                Color::Green // Safe
+                let reboot_str = format_countdown_secs(reboot_secs);
+                let reboot_color = if reboot_secs < 60 {
+                    Color::Red // Less than 1 minute - urgent
+                } else if reboot_secs < 300 {
+                    Color::Yellow // Less than 5 minutes - warning
+                } else {
+                    Color::Green // Safe
+                };
+                (reboot_str, reboot_color)
             };
 
             lines.push(Line::from(vec![
@@ -248,8 +254,7 @@ impl IPresenter for EvalStatusPage {
             ))]
         };
 
-        let paragraph = Paragraph::new(text).block(block);
+        let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
         frame.render_widget(paragraph, *area);
     }
 }
-
