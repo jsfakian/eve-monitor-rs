@@ -102,7 +102,7 @@ impl Ui {
 
     fn tabs() -> Tabs<'static> {
         let tab_titles = UiTabs::iter().map(UiTabs::to_tab_title);
-        let block = Block::new().title(" Use ctrl + ◄ ► to change tab");
+        let block = Block::new().title(" Use k/l to change tab");
         Tabs::new(tab_titles)
             .block(block)
             .highlight_style(Modifier::REVERSED)
@@ -259,13 +259,13 @@ impl Ui {
                     }
                 }
 
-                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left {
-                    debug!("CTRL+Left: switching tab view");
+                if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char('k') {
+                    debug!("k: switching to previous tab");
                     self.selected_tab = self.selected_tab.previous();
                 }
 
-                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right {
-                    debug!("CTRL+Right: switching tab view");
+                if key.modifiers == KeyModifiers::NONE && key.code == KeyCode::Char('l') {
+                    debug!("l: switching to next tab");
                     self.selected_tab = self.selected_tab.next();
                 }
             }
