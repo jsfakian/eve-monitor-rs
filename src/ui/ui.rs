@@ -57,8 +57,11 @@ pub struct Ui {
     pub selected_tab: UiTabs,
     pub status_bar: Window<StatusBarState>,
     first_frame: bool,
-    startup_warning_shown: bool,
-    last_reboot_warning: u64, // Last countdown we showed warning for
+    startup_warning_shown: bool,    // Whether startup warning was ever triggered
+    startup_warning_visible: bool,  // Whether startup warning is currently on all tab stacks
+    last_reboot_warning: u64,       // Last countdown value seen (u64::MAX = uninitialized)
+    reboot_warning_shown: bool,     // Whether reboot warning is currently on all tab stacks
+    pub connection_popup_shown: bool, // Whether IPC connection popup is on all tab stacks
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -90,7 +93,10 @@ impl Ui {
             status_bar: create_status_bar(),
             first_frame: true,
             startup_warning_shown: false,
+            startup_warning_visible: false,
             last_reboot_warning: u64::MAX,
+            reboot_warning_shown: false,
+            connection_popup_shown: false,
         })
     }
 
@@ -228,7 +234,13 @@ impl Ui {
                 {
                     match action.action {
                         UiActions::DismissDialog => {
-                            self.pop_layer();
+                            if self.reboot_warning_shown {
+                                self.dismiss_reboot_warning();
+                            } else if self.startup_warning_visible {
+                                self.dismiss_startup_warning();
+                            } else {
+                                self.pop_layer();
+                            }
                         }
 
                         UiActions::ButtonClicked(name) => match name.as_str() {
@@ -306,18 +318,34 @@ impl Ui {
     pub fn show_eval_startup_warning(&mut self) {
         if !self.startup_warning_shown {
             self.startup_warning_shown = true;
-            let title = "Evaluation Mode";
-            let message = r#"This device is running in EVALUATION MODE.
+            self.startup_warning_visible = true;
+            let title = " Evaluation Mode ";
+            let message = "This device is running in EVALUATION MODE.\n\
+                \n\
+                The device will reboot several times as part of\n\
+                automated evaluation testing.\n\
+                \n\
+                You may inspect all status tabs freely, but:\n\
+                \n\
+                  DO NOT change any settings\n\
+                  DO NOT manually reboot the device\n\
+                \n\
+                Check the EvalStatus tab for the reboot countdown.";
+            // Push to every tab so the warning is visible regardless of which tab is active.
+            for stack in self.views.iter_mut() {
+                let d = super::message_box::create_info_box(title, message);
+                stack.push(Box::new(d));
+            }
+        }
+    }
 
-You can look around and inspect detailed status, but:
-
-DO NOT change settings
-DO NOT reboot the device
-
-The device may reboot automatically when testing is complete.
-
-Check the EvalStatus tab for reboot countdown."#;
-            self.message_box(title, message);
+    /// Remove the startup warning from every tab's layer stack.
+    fn dismiss_startup_warning(&mut self) {
+        if self.startup_warning_visible {
+            for stack in self.views.iter_mut() {
+                stack.remove_by_name(" Evaluation Mode ");
+            }
+            self.startup_warning_visible = false;
         }
     }
 
@@ -325,23 +353,60 @@ Check the EvalStatus tab for reboot countdown."#;
         if let Some(eval_status) = &model.borrow().eval_status {
             let countdown = eval_status.reboot_countdown;
 
-            // Treat countdown == 0 as "no reboot scheduled" and reset state.
+            // countdown == 0 means no reboot scheduled; dismiss any visible warning.
             if countdown == 0 {
-                self.last_reboot_warning = 0;
+                self.last_reboot_warning = u64::MAX;
+                self.dismiss_reboot_warning();
                 return;
             }
 
-            // Show warning once per reboot cycle when countdown becomes urgent
-            // (less than 5 minutes) and we haven't shown it yet for this cycle.
-            if countdown < 300 && self.last_reboot_warning == 0 {
+            // Show warning once when the countdown crosses below 5 minutes.
+            // Detect threshold crossing: previously >= 300, now < 300.
+            if countdown < 300 && self.last_reboot_warning >= 300 && !self.reboot_warning_shown {
                 self.last_reboot_warning = countdown;
-                let d = create_reboot_warning_dialog(countdown);
-                self.push_layer(d);
+                self.reboot_warning_shown = true;
+                // Push to every tab so the warning is visible regardless of which tab is active.
+                for stack in self.views.iter_mut() {
+                    let d = create_reboot_warning_dialog(countdown);
+                    stack.push(Box::new(d));
+                }
             } else {
-                // Track the last seen countdown without spamming dialogs.
                 self.last_reboot_warning = countdown;
             }
         }
+    }
+
+    /// Remove the reboot warning from every tab's layer stack by name.
+    fn dismiss_reboot_warning(&mut self) {
+        if self.reboot_warning_shown {
+            for stack in self.views.iter_mut() {
+                stack.remove_by_name("Reboot Warning");
+            }
+            self.reboot_warning_shown = false;
+        }
+    }
+
+    /// Push a non-dismissable system popup onto every tab's layer stack.
+    pub fn show_connection_popup(&mut self, message: &str) {
+        if self.connection_popup_shown {
+            return;
+        }
+        for stack in self.views.iter_mut() {
+            let popup = super::message_box::create_system_message_box(" EVE Connection ", message);
+            stack.push(Box::new(popup));
+        }
+        self.connection_popup_shown = true;
+    }
+
+    /// Remove the connection popup from every tab's layer stack by name.
+    pub fn dismiss_connection_popup(&mut self) {
+        if !self.connection_popup_shown {
+            return;
+        }
+        for stack in self.views.iter_mut() {
+            stack.remove_by_name(" EVE Connection ");
+        }
+        self.connection_popup_shown = false;
     }
 }
 

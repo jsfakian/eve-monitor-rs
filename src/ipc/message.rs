@@ -53,6 +53,10 @@ pub enum Request {
 pub enum IpcMessage {
     Connecting,
     Ready,
+    /// Initial connection attempt timed out; the task will retry.
+    ConnectionFailed,
+    /// A previously established connection was lost; the task will reconnect.
+    ConnectionLost,
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
     DownloaderStatus(DownloaderStatus),

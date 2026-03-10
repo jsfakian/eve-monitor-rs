@@ -6,6 +6,7 @@ use async_inotify::Watcher;
 use inotify::EventMask;
 use log::{debug, info};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::{net::UnixStream, task::JoinHandle};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
@@ -28,6 +29,20 @@ impl IpcClient {
         }
         Err(anyhow!("Failed to connect to socket"))
     }
+    pub async fn connect_with_timeout(
+        path: &str,
+        timeout: Duration,
+    ) -> Result<Framed<UnixStream, LengthDelimitedCodec>> {
+        match tokio::time::timeout(timeout, Self::connect(path)).await {
+            Ok(result) => result,
+            Err(_) => Err(anyhow!(
+                "Timed out after {:?} waiting for IPC connection at {}",
+                timeout,
+                path
+            )),
+        }
+    }
+
     pub async fn connect(path: &str) -> Result<Framed<UnixStream, LengthDelimitedCodec>> {
         //spawn a task to wait for the socket file to be created
         let socket_path = PathBuf::from(path);

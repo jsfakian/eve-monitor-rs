@@ -28,19 +28,24 @@ pub struct RebootWarningState {
 
 fn on_init(w: &mut Window<RebootWarningState>) {
     let secs = w.state.countdown_secs;
-    let mins = secs / 60;
-    
     let msg = if secs < 60 {
-        format!("⚠ REBOOT IMMINENT ⚠\n\nDevice will reboot in {} seconds!\n\nDo not turn off or force restart.",
-                secs)
+        "⚠  REBOOT IMMINENT  ⚠\n\n\
+         The device will reboot imminently as part\n\
+         of evaluation testing.\n\n\
+         Do not power off the device.\n\
+         Check the EvalStatus tab for the countdown."
+            .to_string()
     } else {
-        format!("⚠ REBOOT WARNING ⚠\n\nDevice will reboot soon (in {}m {}s)\n\nSave any work and prepare for restart.",
-                mins, secs % 60)
+        "⚠  EVALUATION REBOOT WARNING  ⚠\n\n\
+         The device will reboot within the next\n\
+         5 minutes as part of evaluation testing.\n\n\
+         Do not power off the device.\n\
+         Check the EvalStatus tab for the countdown."
+            .to_string()
     };
-    
+
     w.add_widget("label", LabelElement::new(msg));
     w.add_widget("ok", ButtonElement::new("Acknowledge"));
-
     w.set_focus_tracker_tab_order(vec!["ok"]);
 }
 
@@ -67,7 +72,7 @@ fn do_render(
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .style(Style::default().bg(Color::Black))
-        .title(" Reboot Warning ");
+        .title(" Evaluation Reboot ");
 
     frame.render_widget(block, frame_rect);
 }
@@ -75,7 +80,7 @@ fn do_render(
 fn do_layout(w: &mut Window<RebootWarningState>, rect: &Rect, _model: &Rc<Model>) {
     debug!("do_layout: reboot warning dialog");
 
-    let rect = crate::ui::tools::centered_rect_fixed(50, 12, *rect);
+    let rect = crate::ui::tools::centered_rect_fixed(52, 14, *rect);
     let content_with_buttons = rect.inner(Margin {
         horizontal: 1,
         vertical: 1,
@@ -83,13 +88,11 @@ fn do_layout(w: &mut Window<RebootWarningState>, rect: &Rect, _model: &Rc<Model>
 
     w.update_layout("frame", rect);
 
-    let [dialog_content, buttons] =
+    let [label_area, buttons] =
         Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(3)])
             .flex(Flex::End)
             .areas(content_with_buttons);
 
-    let [label_area, _] =
-        Layout::vertical(vec![Constraint::Length(5), Constraint::Fill(1)]).areas(dialog_content);
     w.update_layout("label", label_area);
 
     // center button

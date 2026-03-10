@@ -169,6 +169,28 @@ impl Application {
 
     pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
         match msg {
+            IpcMessage::Connecting => {
+                info!("IPC: connecting...");
+                self.model.borrow_mut().ipc_connected = false;
+            }
+            IpcMessage::Ready => {
+                info!("IPC: connection established");
+                self.model.borrow_mut().ipc_connected = true;
+                self.ui.dismiss_connection_popup();
+            }
+            IpcMessage::ConnectionFailed => {
+                warn!("IPC: initial connection failed, retrying");
+                self.model.borrow_mut().ipc_connected = false;
+                self.ui.show_connection_popup("Connecting to EVE, retrying...");
+            }
+            IpcMessage::ConnectionLost => {
+                warn!("IPC: connection lost, reconnecting");
+                self.model.borrow_mut().ipc_connected = false;
+                self.pending_requests.clear();
+                self.ui.show_connection_popup(
+                    "Connection to EVE lost.\nSystem may be restarting. Reconnecting...",
+                );
+            }
             IpcMessage::Response { result, id } => {
                 debug!("Got response: {:?}", result);
                 match result {
@@ -459,46 +481,99 @@ impl Application {
         self.ipc_tx = Some(ipc_cmd_tx);
 
         let ipc_task = tokio::spawn(async move {
-            ipc_tx.send(IpcMessage::Connecting).unwrap();
-
             let socket_path = Application::get_socket_path();
+            let connect_timeout = std::time::Duration::from_secs(30);
+            let retry_delay = std::time::Duration::from_secs(2);
 
-            info!("Connecting to IPC socket {} ", &socket_path);
-            let stream = IpcClient::connect(&socket_path).await.unwrap();
-            let (mut sink, mut stream) = stream.split();
+            'reconnect: loop {
+                if ipc_cancel_token_clone.is_cancelled() {
+                    return;
+                }
 
-            ipc_tx.send(IpcMessage::Ready).unwrap();
+                ipc_tx.send(IpcMessage::Connecting).unwrap();
+                info!("Connecting to IPC socket {}", &socket_path);
 
-            while !ipc_cancel_token_clone.is_cancelled() {
-                let ipc_event = stream.next().fuse();
-
-                tokio::select! {
+                let stream = tokio::select! {
                     _ = ipc_cancel_token_clone.cancelled() => {
+                        info!("IPC task cancelled during connect");
+                        return;
+                    }
+                    result = IpcClient::connect_with_timeout(&socket_path, connect_timeout) => {
+                        match result {
+                            Ok(s) => s,
+                            Err(e) => {
+                                warn!("IPC connection failed: {:?}", e);
+                                ipc_tx.send(IpcMessage::ConnectionFailed).unwrap();
+                                tokio::select! {
+                                    _ = ipc_cancel_token_clone.cancelled() => return,
+                                    _ = tokio::time::sleep(retry_delay) => {}
+                                }
+                                continue 'reconnect;
+                            }
+                        }
+                    }
+                };
+
+                let (mut sink, mut stream) = stream.split();
+                // Drain any stale queued commands from before reconnection.
+                while ipc_cmd_rx.try_recv().is_ok() {}
+                ipc_tx.send(IpcMessage::Ready).unwrap();
+
+                loop {
+                    if ipc_cancel_token_clone.is_cancelled() {
                         info!("IPC task was cancelled");
                         return;
                     }
-                    msg = ipc_cmd_rx.recv() => {
-                        match msg {
-                            Some(msg) => {
-                                sink.send(msg.into()).await.unwrap();
-                            }
-                            None => {
-                                warn!("IPC message stream ended");
-                                break;
-                            }
+
+                    let ipc_event = stream.next().fuse();
+
+                    tokio::select! {
+                        _ = ipc_cancel_token_clone.cancelled() => {
+                            info!("IPC task was cancelled");
+                            return;
                         }
-                    },
-                    msg = ipc_event => {
-                        match msg {
-                            Some(Ok(msg)) => {
-                                ipc_tx.send(IpcMessage::from(msg)).unwrap();
+                        msg = ipc_cmd_rx.recv() => {
+                            match msg {
+                                Some(msg) => {
+                                    if let Err(e) = sink.send(msg.into()).await {
+                                        warn!("Error sending IPC message: {:?}", e);
+                                        ipc_tx.send(IpcMessage::ConnectionLost).unwrap();
+                                        tokio::select! {
+                                            _ = ipc_cancel_token_clone.cancelled() => return,
+                                            _ = tokio::time::sleep(retry_delay) => {}
+                                        }
+                                        continue 'reconnect;
+                                    }
+                                }
+                                None => {
+                                    warn!("IPC command channel closed");
+                                    return;
+                                }
                             }
-                            Some(Err(e)) => {
-                                warn!("Error reading IPC message: {:?}", e);
-                            }
-                            None => {
-                                warn!("IPC message stream ended");
-                                break;
+                        },
+                        msg = ipc_event => {
+                            match msg {
+                                Some(Ok(msg)) => {
+                                    ipc_tx.send(IpcMessage::from(msg)).unwrap();
+                                }
+                                Some(Err(e)) => {
+                                    warn!("Error reading IPC message: {:?}", e);
+                                    ipc_tx.send(IpcMessage::ConnectionLost).unwrap();
+                                    tokio::select! {
+                                        _ = ipc_cancel_token_clone.cancelled() => return,
+                                        _ = tokio::time::sleep(retry_delay) => {}
+                                    }
+                                    continue 'reconnect;
+                                }
+                                None => {
+                                    warn!("IPC stream closed by peer");
+                                    ipc_tx.send(IpcMessage::ConnectionLost).unwrap();
+                                    tokio::select! {
+                                        _ = ipc_cancel_token_clone.cancelled() => return,
+                                        _ = tokio::time::sleep(retry_delay) => {}
+                                    }
+                                    continue 'reconnect;
+                                }
                             }
                         }
                     }
