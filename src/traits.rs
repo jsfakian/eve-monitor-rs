@@ -57,7 +57,7 @@ pub trait IWindow: IPresenter + IEventHandler {
         None
     }
     fn window_name(&self) -> &str {
-        ""
+        std::any::type_name::<Self>()
     }
 }
 pub trait IWidget: IWidgetPresenter + IElementEventHandler {

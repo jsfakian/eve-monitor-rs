@@ -3,7 +3,6 @@
 
 use crate::actions::MonActions;
 use crate::events::Event;
-use crate::ipc::eve_types::TuiEveConfig;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
 use crate::ui::ipdialog::InterfaceState;

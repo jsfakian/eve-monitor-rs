@@ -35,7 +35,6 @@ use super::{
     app_page::ApplicationsPage,
     evalstatus_page::EvalStatusPage,
     layer_stack::LayerStack,
-    message_box::create_system_message_box,
     networkpage::create_network_page,
     reboot_warning::{create_reboot_warning_dialog, WINDOW_NAME as REBOOT_WARNING_NAME},
     statusbar::{create_status_bar, StatusBarState},
@@ -44,8 +43,8 @@ use super::{
     window::Window,
 };
 
-const STARTUP_WARNING_NAME: &str = " Evaluation Mode ";
-const CONNECTION_POPUP_NAME: &str = " EVE Connection ";
+const STARTUP_WARNING_NAME: &str = "Evaluation Mode";
+const CONNECTION_POPUP_NAME: &str = "EVE Connection";
 
 #[cfg(debug_assertions)]
 use super::homepage::HomePage;
@@ -66,6 +65,7 @@ pub struct Ui {
     last_reboot_warning: u64,       // Last countdown value seen (u64::MAX = uninitialized)
     reboot_warning_shown: bool,     // Whether reboot warning is currently on all tab stacks
     connection_popup_shown: bool,   // Whether IPC connection popup is on all tab stacks
+    last_connection_message: Option<String>, // Last message shown in the connection popup
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -102,6 +102,7 @@ impl Ui {
             last_reboot_warning: u64::MAX,
             reboot_warning_shown: false,
             connection_popup_shown: false,
+            last_connection_message: None,
         })
     }
 
@@ -181,34 +182,6 @@ impl Ui {
             .unwrap();
     }
 
-    /// Push a non-dismissable system message box onto every tab's layer stack
-    /// to indicate that the IPC connection to EVE is being established.
-    /// No-op if the popup is already shown.
-    pub fn show_connection_popup(&mut self, message: &str) {
-        if self.connection_popup_shown {
-            return;
-        }
-        info!("Showing connection popup on all tabs");
-        for stack in self.views.iter_mut() {
-            let popup = create_system_message_box(" EVE Connection ", message);
-            stack.push(Box::new(popup));
-        }
-        self.connection_popup_shown = true;
-    }
-
-    /// Pop the connection popup from every tab's layer stack.
-    /// No-op if the popup is not currently shown.
-    pub fn dismiss_connection_popup(&mut self) {
-        if !self.connection_popup_shown {
-            return;
-        }
-        info!("Dismissing connection popup from all tabs");
-        for stack in self.views.iter_mut() {
-            stack.pop();
-        }
-        self.connection_popup_shown = false;
-    }
-
     pub fn handle_event(&mut self, event: Event) -> Option<Action> {
         if event != Event::Tick {
             debug!("Ui handle_event {:?}", event);
@@ -286,16 +259,6 @@ impl Ui {
                                 self.pop_layer();
                             }
                         }
-
-                        UiActions::ButtonClicked(name) => match name.as_str() {
-                            "Ok" => {
-                                self.pop_layer();
-                            }
-                            "Cancel" => {
-                                self.pop_layer();
-                            }
-                            _ => {}
-                        },
 
                         _ => {
                             return Some(action);
@@ -424,6 +387,10 @@ Check the Eval Status tab for the reboot countdown.";
                 }
             }
             self.last_reboot_warning = countdown;
+        } else {
+            // eval_status is gone (e.g. IPC disconnect): clear any visible warning.
+            self.last_reboot_warning = u64::MAX;
+            self.dismiss_reboot_warning();
         }
     }
 
@@ -440,6 +407,10 @@ Check the Eval Status tab for the reboot countdown.";
     /// Push a non-dismissable system popup onto every tab's layer stack.
     pub fn show_connection_popup(&mut self, message: &str) {
         if self.connection_popup_shown {
+            // Skip the replace entirely if the message hasn't changed.
+            if self.last_connection_message.as_deref() == Some(message) {
+                return;
+            }
             // Popup already shown: replace it on each stack so the message stays accurate.
             for stack in self.views.iter_mut() {
                 stack.remove_by_name(CONNECTION_POPUP_NAME);
@@ -456,6 +427,7 @@ Check the Eval Status tab for the reboot countdown.";
             }
             self.connection_popup_shown = true;
         }
+        self.last_connection_message = Some(message.to_string());
     }
 
     /// Remove the connection popup from every tab's layer stack by name.
@@ -467,6 +439,7 @@ Check the Eval Status tab for the reboot countdown.";
             stack.remove_by_name(CONNECTION_POPUP_NAME);
         }
         self.connection_popup_shown = false;
+        self.last_connection_message = None;
     }
 }
 

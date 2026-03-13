@@ -31,7 +31,7 @@ fn format_duration_ns(nanos: u64) -> String {
 
 /// Returns true if `ts` is the Go zero-value (0001-01-01), used as "not set".
 fn is_zero_time(ts: &DateTime<chrono::FixedOffset>) -> bool {
-    ts.year() < 2000
+    ts.year() == 1
 }
 
 /// Parse an RFC-3339 timestamp string and return a "X ago" or "just now" string.
