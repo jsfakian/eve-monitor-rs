@@ -301,6 +301,10 @@ impl<D> IWindow for Window<D> {
             })
         })
     }
+
+    fn window_name(&self) -> &str {
+        &self.name
+    }
 }
 
 impl<D> IEventHandler for Window<D> {

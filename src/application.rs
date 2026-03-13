@@ -796,10 +796,10 @@ impl Application {
                 }
             }
         }
-        
+
         // Check for reboot countdown warnings
         self.ui.check_and_show_reboot_warning(&model);
-        
+
         self.ui.draw(model);
         Ok(())
     }

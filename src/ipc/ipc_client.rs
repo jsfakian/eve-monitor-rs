@@ -60,14 +60,9 @@ impl IpcClient {
         let socket_path = PathBuf::from(path);
 
         // check if the socket file exists and return if it does
-        // TODO: there is a small chance that the file is created after this check
-        // TODO 2: get rid of it and just keep retrying?
         if !socket_path.exists() {
-            let socket_task: JoinHandle<Result<(), anyhow::Error>> =
-                tokio::spawn(async move { Self::wait_for_socket_file(&socket_path).await });
-
             info!("Waiting for socket file {} to be created", path);
-            socket_task.await??;
+            Self::wait_for_socket_file(&socket_path).await?;
         }
 
         let unix_stream = Self::try_connect(path, 30).await?;

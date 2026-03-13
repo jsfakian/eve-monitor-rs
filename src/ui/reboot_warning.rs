@@ -1,6 +1,8 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+pub const WINDOW_NAME: &str = "Reboot Warning";
+
 use std::rc::Rc;
 
 use crossterm::event::KeyCode;
@@ -28,19 +30,24 @@ pub struct RebootWarningState {
 
 fn on_init(w: &mut Window<RebootWarningState>) {
     let secs = w.state.countdown_secs;
-    let mins = secs / 60;
-    
     let msg = if secs < 60 {
-        format!("⚠ REBOOT IMMINENT ⚠\n\nDevice will reboot in {} seconds!\n\nDo not turn off or force restart.",
-                secs)
+        "⚠  REBOOT IMMINENT  ⚠\n\n\
+         The device will reboot imminently as part\n\
+         of evaluation testing.\n\n\
+         Do not power off the device.\n\
+         Check the Eval Status tab for the countdown."
+            .to_string()
     } else {
-        format!("⚠ REBOOT WARNING ⚠\n\nDevice will reboot soon (in {}m {}s)\n\nSave any work and prepare for restart.",
-                mins, secs % 60)
+        "⚠  EVALUATION REBOOT WARNING  ⚠\n\n\
+         The device will reboot within the next\n\
+         5 minutes as part of evaluation testing.\n\n\
+         Do not power off the device.\n\
+         Check the Eval Status tab for the countdown."
+            .to_string()
     };
-    
+
     w.add_widget("label", LabelElement::new(msg));
     w.add_widget("ok", ButtonElement::new("Acknowledge"));
-
     w.set_focus_tracker_tab_order(vec!["ok"]);
 }
 
@@ -67,7 +74,7 @@ fn do_render(
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(border_color).add_modifier(Modifier::BOLD))
         .style(Style::default().bg(Color::Black))
-        .title(" Reboot Warning ");
+        .title(" Evaluation Reboot ");
 
     frame.render_widget(block, frame_rect);
 }
@@ -75,7 +82,7 @@ fn do_render(
 fn do_layout(w: &mut Window<RebootWarningState>, rect: &Rect, _model: &Rc<Model>) {
     debug!("do_layout: reboot warning dialog");
 
-    let rect = crate::ui::tools::centered_rect_fixed(50, 12, *rect);
+    let rect = crate::ui::tools::centered_rect_fixed(52, 14, *rect);
     let content_with_buttons = rect.inner(Margin {
         horizontal: 1,
         vertical: 1,
@@ -83,13 +90,11 @@ fn do_layout(w: &mut Window<RebootWarningState>, rect: &Rect, _model: &Rc<Model>
 
     w.update_layout("frame", rect);
 
-    let [dialog_content, buttons] =
+    let [label_area, buttons] =
         Layout::vertical(vec![Constraint::Fill(1), Constraint::Length(3)])
             .flex(Flex::End)
             .areas(content_with_buttons);
 
-    let [label_area, _] =
-        Layout::vertical(vec![Constraint::Length(5), Constraint::Fill(1)]).areas(dialog_content);
     w.update_layout("label", label_area);
 
     // center button
@@ -107,7 +112,7 @@ fn do_layout(w: &mut Window<RebootWarningState>, rect: &Rect, _model: &Rc<Model>
 fn on_key_event(w: &mut Window<RebootWarningState>, key: KeyEvent) -> Option<Action> {
     debug!("reboot_warning: on_key_event");
 
-    if key.code == KeyCode::Esc || key.code == KeyCode::Enter {
+    if key.code == KeyCode::Esc {
         return Some(Action::new(&w.name, UiActions::DismissDialog));
     }
     None
@@ -128,7 +133,7 @@ fn on_child_ui_action(
 }
 
 pub fn create_reboot_warning_dialog(countdown_secs: u64) -> Window<RebootWarningState> {
-    let w = Window::builder("Reboot Warning")
+    let w = Window::builder(WINDOW_NAME)
         .with_on_init(on_init)
         .with_layout(do_layout)
         .with_render(do_render)

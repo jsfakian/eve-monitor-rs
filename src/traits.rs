@@ -56,6 +56,9 @@ pub trait IWindow: IPresenter + IEventHandler {
     fn status_bar_tips(&self) -> Option<String> {
         None
     }
+    fn window_name(&self) -> &str {
+        ""
+    }
 }
 pub trait IWidget: IWidgetPresenter + IElementEventHandler {
     fn as_any(&self) -> &dyn Any;
